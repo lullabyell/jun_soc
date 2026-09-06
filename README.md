@@ -1,6 +1,6 @@
-# Junior SOC API Assessment
+# SOC API Assessment
 
-This is a small FastAPI project made for a Junior SOC assessment.
+This is a small FastAPI project made for a SOC assessment.
 
 The API has a simple authentication system with:
 

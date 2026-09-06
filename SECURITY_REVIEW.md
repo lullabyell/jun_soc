@@ -205,25 +205,10 @@ The activity from `203.0.113.45` also contains failed and successful logins, but
 ### Token storage
 
 The API creates the tokens, but how the client stores them is not part of this project.
-
-For example, storing tokens in `localStorage` could be a problem if a website has an XSS vulnerability.
-
-For a real application, I would look into using secure HttpOnly cookies or another secure token storage method.
+For a real application, I would look into using some secure token storage method.
 
 ### SQL Injection
 
 This project does not use a database, so there are currently no SQL queries to attack.
 
-If a database was added later, I would use parameterized queries or an ORM instead of building SQL queries directly from user input.
-
----
-
-## 6. Conclusion
-
-The API implements the main authentication requirements and has some basic security protections.
-
-I tested the JWT `alg:none` case and the token was rejected.
-
-I also tested repeated login attempts. The main weakness I found is that there is no rate limiting, so an attacker could continue trying passwords.
-
-The project is intentionally small and does not include a database or production-level security features.
+If a database was added later, I would use an ORM instead of building SQL queries directly from user input.
