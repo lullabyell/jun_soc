@@ -2,56 +2,74 @@
 
 ## 1. Self-Audit
 
-### Security controls implemented
+### Security controls
 
-1. **Passwords are hashed with Argon2**
-   - User passwords are stored as Argon2 hashes instead of plaintext passwords.
-   - Argon2 is designed for password hashing and is more appropriate than fast hashing algorithms such as SHA-256.
+I added the following security controls to the API.
 
-2. **JWT algorithms are explicitly restricted**
-   - The application uses `HS256` for JWTs.
-   - Token decoding explicitly allows only `HS256`.
-   - This helps prevent attacks such as accepting a JWT with the `alg` value set to `none`.
+**1. Passwords are hashed with Argon2**
 
-3. **Access and refresh tokens have different types and lifetimes**
-   - Access tokens expire after 15 minutes.
-   - Refresh tokens expire after 7 days.
-   - Tokens contain a `type` claim so a refresh token cannot be used as an access token.
+Passwords are not stored directly. They are stored as Argon2 hashes.
 
-4. **Secrets are stored outside the source code**
-   - The JWT signing secret is loaded from the `.env` file.
-   - `.env` is excluded from Git using `.gitignore`.
-   - `.env.example` contains only a placeholder value.
+I used Argon2 because it is made for password hashing.
 
-5. **Authentication errors do not reveal whether a username exists**
-   - Failed login attempts return the same `Invalid username or password` message.
-   - This reduces the risk of username enumeration.
+**2. JWT algorithm is restricted**
 
-### Limitation / trade-off
+The API uses `HS256` for signing JWTs.
 
-The application uses an in-memory user store and does not have a database. This keeps the assessment project simple, but it is not suitable for a production authentication system because users and password hashes are not persisted between deployments.
+When decoding a token, the application only allows `HS256`. This means that a token using another algorithm, such as `none`, is rejected.
 
-The refresh token is also reused instead of being rotated after every refresh. Token rotation would provide stronger protection if a refresh token were stolen.
+**3. Access and refresh tokens are separated**
+
+Access tokens expire after 15 minutes.
+
+Refresh tokens expire after 7 days.
+
+The tokens also have different `type` values. Because of this, a refresh token cannot be used to access `/profile`.
+
+**4. JWT secret is not stored in the code**
+
+The JWT secret is loaded from the `.env` file.
+
+The `.env` file is included in `.gitignore`, so it should not be committed to Git.
+
+The repository only contains `.env.example` with a placeholder value.
+
+**5. Login errors are general**
+
+When login fails, the API returns:
+
+```text
+Invalid username or password
+```
+
+The API does not say whether the username exists. This gives an attacker less information when trying different usernames.
+
+### Limitations
+
+The user data is stored in memory, so this is not suitable for a real production application.
+
+Another limitation is that refresh tokens are not rotated. The same refresh token can be used again until it expires.
+
+I kept these parts simple because this is a small assessment project.
 
 ---
 
-## 2. Attack Scenario: JWT `alg:none`
+## 2. JWT `alg:none` Test
 
-### Objective
+### What I tested
 
-Test whether the API accepts a JWT with the signing algorithm changed to `none`.
+I wanted to check if the API would accept a JWT where the algorithm is changed to `none`.
 
-### Test
-
-A valid access token was modified so that its JWT header contained:
+I changed the JWT header to:
 
 ```json
 {
   "alg": "none",
   "typ": "JWT"
 }
+```
 
-The modified token was then sent to:
+Then I used the modified token to access:
 
 ```text
 GET /profile
@@ -65,11 +83,9 @@ The API returned:
 401 Unauthorized
 ```
 
-The token was rejected.
+So the token was rejected.
 
-### Security control
-
-The application decodes JWTs using an explicit algorithm allowlist:
+The JWT decoding code only allows `HS256`:
 
 ```python
 jwt.decode(
@@ -79,84 +95,88 @@ jwt.decode(
 )
 ```
 
-Since `JWT_ALGORITHM` is `HS256`, tokens using another algorithm are not accepted.
+This prevents the API from accepting a token with the `none` algorithm.
 
 ### Conclusion
 
-The `alg:none` test was unsuccessful, which is the expected secure behavior.
+The test passed because the modified token was rejected.
 
 ---
 
-## 3. Attack Scenario: Brute-Force Login Attempts
+## 3. Brute-Force Login Test
 
-### Objective
+### What I tested
 
-Test how the application behaves when a large number of failed login attempts are made in a short period.
-
-### Test
-
-A series of incorrect login attempts was sent to:
+I tested what happens if someone sends many incorrect passwords to:
 
 ```text
 POST /login
 ```
 
-The test generated repeated `401 Unauthorized` responses, followed by a successful login using the correct credentials.
+I sent multiple login attempts with incorrect passwords.
+
+The API returned `401 Unauthorized` for the failed attempts. After that, a login with the correct password was successful.
 
 ### Result
 
-The application successfully rejected the incorrect passwords, but there is currently no rate limiting or account lockout.
+The API handles incorrect passwords correctly, but there is currently no rate limiting or account lockout.
 
-This means an attacker could continue making password guesses without the application automatically slowing down or blocking the attempts.
+This means someone could keep trying passwords many times.
 
 ### Risk
 
-Repeated login attempts can be used for password guessing or brute-force attacks.
+An attacker could use many login attempts to try to guess a user's password.
 
-### Recommendation
+### Possible improvement
 
-For a production system, implement rate limiting based on IP address and/or account, together with monitoring and alerting for repeated authentication failures.
+For a real application, I would add rate limiting and monitoring for repeated failed login attempts.
 
 ---
 
 ## 4. Log Analysis
 
-The following analysis was performed against the synthetic `logs/access.log` file created for this assessment.
+For the log analysis, I used the sample log file in:
 
-### Count failed login attempts by source IP
+```text
+logs/access.log
+```
 
-Command:
+The log file contains test data created for this assessment.
+
+### Finding failed login attempts
+
+I used:
 
 ```bash
 grep "POST /login 401" logs/access.log | awk '{print $3}' | sort | uniq -c | sort -nr
 ```
 
-Result:
+The result was:
 
 ```text
 20 192.168.1.25
 3 203.0.113.45
 ```
 
-The IP `192.168.1.25` generated the largest number of failed login attempts.
+The IP `192.168.1.25` had the most failed login attempts.
 
-### Identify successful logins
+### Checking successful logins
 
-Command:
+I used:
 
 ```bash
 grep "POST /login 200" logs/access.log
 ```
 
-The results included:
+One of the results was:
 
 ```text
 2026-09-06 16:51:30 192.168.1.25 POST /login 200
 ```
 
-### Investigate the suspicious IP
+### Checking the suspicious IP
 
-Command:
+I then checked all activity from this IP:
 
 ```bash
 grep "192.168.1.25" logs/access.log
@@ -164,41 +184,46 @@ grep "192.168.1.25" logs/access.log
 
 The activity showed:
 
-* 20 failed login attempts between `16:51:10` and `16:51:29`.
-* A successful login at `16:51:30`.
-* A successful authenticated `/profile` request at `16:52:10`.
-* The sequence of many failures followed immediately by a successful login is suspicious and should be investigated in a real environment.
+* 20 failed login attempts in a short period
+* A successful login immediately after the failed attempts
+* A successful `/profile` request after the login
+
+This looks suspicious because there were many failed attempts followed by a successful login.
 
 ### SOC assessment
 
-The activity from `192.168.1.25` is consistent with a possible brute-force or password-guessing attempt followed by successful authentication.
+I would consider `192.168.1.25` a possible brute-force or password-guessing attempt.
 
-However, the logs alone do not prove that the account was compromised. In a real investigation, I would correlate the IP with firewall/proxy logs, identify the affected username, check whether the successful login was expected, and review subsequent activity.
+The logs alone do not prove that the account was compromised. I would need more information, such as the username and other logs, to investigate it further.
 
-The `203.0.113.45` activity also shows multiple failed attempts followed by a successful login, but with only three failures it is less suspicious than `192.168.1.25`.
+The activity from `203.0.113.45` also contains failed and successful logins, but there were only three failed attempts, so it looks less suspicious.
 
 ---
 
-## 5. Additional Security Considerations
+## 5. Other Security Considerations
 
 ### Token storage
 
-The server issues access and refresh tokens, but secure client-side token storage is outside the scope of this API.
+The API creates the tokens, but how the client stores them is not part of this project.
 
-For a browser-based application, storing tokens in `localStorage` can expose them to JavaScript-based attacks such as XSS. HttpOnly, Secure cookies can reduce token theft through JavaScript, although cookie-based authentication introduces CSRF considerations.
+For example, storing tokens in `localStorage` could be a problem if a website has an XSS vulnerability.
+
+For a real application, I would look into using secure HttpOnly cookies or another secure token storage method.
 
 ### SQL Injection
 
-The current application does not use a database, so there is no SQL query to exploit.
+This project does not use a database, so there are currently no SQL queries to attack.
 
-If database functionality were added, user input should be handled using parameterized queries or a properly configured ORM rather than constructing SQL statements through string concatenation.
+If a database was added later, I would use parameterized queries or an ORM instead of building SQL queries directly from user input.
 
 ---
 
-## 6. Overall Assessment
+## 6. Conclusion
 
-The implementation provides the requested basic authentication functionality and includes several important security controls, including Argon2 password hashing, environment-based secret management, JWT algorithm restriction, token expiration, and access/refresh token separation.
+The API implements the main authentication requirements and has some basic security protections.
 
-The main identified weakness is the absence of rate limiting or account protection against repeated login attempts.
+I tested the JWT `alg:none` case and the token was rejected.
 
-The project is intentionally minimal and is suitable as an assessment/demo application, but additional controls would be required before using the authentication system in production.
+I also tested repeated login attempts. The main weakness I found is that there is no rate limiting, so an attacker could continue trying passwords.
+
+The project is intentionally small and does not include a database or production-level security features.

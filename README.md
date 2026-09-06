@@ -1,23 +1,23 @@
 # Junior SOC API Assessment
 
-A minimal FastAPI authentication API created as part of a Junior SOC assessment.
+This is a small FastAPI project made for a Junior SOC assessment.
 
-The API implements:
+The API has a simple authentication system with:
 
-* User login with username and password
-* Argon2 password hashing
+* Login with username and password
+* Password hashing with Argon2
 * JWT access and refresh tokens
 * Protected `/profile` endpoint
-* Refresh token flow
+* Refresh token endpoint
 * Basic input validation
-* Environment-based JWT secret configuration
+* JWT secret stored in environment variables
 
 ## Technologies
 
-* Python 3.11+
+* Python
 * FastAPI
 * PyJWT
-* pwdlib with Argon2
+* pwdlib / Argon2
 * python-dotenv
 * Poetry
 * pytest
@@ -46,53 +46,49 @@ jun_soc/
 
 ## Setup
 
-### 1. Install dependencies
-
-Make sure Poetry is installed, then run:
+First install the dependencies:
 
 ```bash
 poetry install
 ```
 
-### 2. Configure environment variables
-
-Create a `.env` file based on `.env.example`:
+Create a `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-Generate a random JWT secret:
+Then add a random secret to the `.env` file. For example:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Put the generated value in `.env`:
+The `.env` file should not be committed to Git.
+
+Example:
 
 ```text
-JWT_SECRET_KEY=your-generated-secret
+JWT_SECRET_KEY=generated-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
-The `.env` file is excluded from Git and should not be committed.
-
 ## Running the API
 
-Start the development server with:
+Start the application with:
 
 ```bash
 poetry run uvicorn app.main:app --reload
 ```
 
-The API will be available at:
+The API will run on:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Interactive API documentation is available at:
+FastAPI also provides interactive documentation at:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -102,7 +98,7 @@ http://127.0.0.1:8000/docs
 
 ### `GET /health`
 
-Checks whether the API is running.
+Checks if the API is running.
 
 Example response:
 
@@ -114,9 +110,9 @@ Example response:
 
 ### `POST /login`
 
-Authenticates a user and returns an access token and refresh token.
+Used to log in with a username and password.
 
-Example request:
+Example:
 
 ```json
 {
@@ -125,21 +121,13 @@ Example request:
 }
 ```
 
-Example response:
-
-```json
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "token_type": "bearer"
-}
-```
+If the credentials are correct, the API returns an access token and a refresh token.
 
 ### `GET /profile`
 
-Returns information about the authenticated user.
+Returns information about the logged-in user.
 
-The access token must be provided using the `Authorization` header:
+An access token is required:
 
 ```text
 Authorization: Bearer <access_token>
@@ -147,9 +135,9 @@ Authorization: Bearer <access_token>
 
 ### `POST /refresh`
 
-Accepts a valid refresh token and returns a new access token.
+Used to get a new access token using a refresh token.
 
-Example request:
+Example:
 
 ```json
 {
@@ -159,31 +147,40 @@ Example request:
 
 ## Testing
 
-Run the automated tests with:
+Run the tests with:
 
 ```bash
 poetry run pytest
 ```
 
-The tests cover successful and failed login attempts, protected profile access, refresh tokens, and preventing refresh tokens from being used as access tokens.
+The tests check things like:
+
+* Successful login
+* Wrong password
+* Accessing `/profile` without a token
+* Accessing `/profile` with a valid token
+* Refreshing a token
+* Making sure a refresh token cannot be used as an access token
 
 ## Security
 
-The application includes several basic security controls:
+Some basic security measures were added:
 
-* Passwords are hashed using Argon2.
-* JWT decoding explicitly allows only the `HS256` algorithm.
-* Access tokens have a short lifetime of 15 minutes.
-* Refresh tokens have a 7-day lifetime.
-* Access and refresh tokens have different token types.
-* JWT secrets are loaded from environment variables.
-* `.env` is excluded from Git.
-* Login errors use a generic message to reduce username enumeration.
+* Passwords are stored as Argon2 hashes.
+* JWTs only accept the `HS256` algorithm.
+* Access tokens expire after 15 minutes.
+* Refresh tokens expire after 7 days.
+* Access and refresh tokens have different types.
+* The JWT secret is stored in `.env`.
+* `.env` is included in `.gitignore`.
+* Failed login attempts return a general error message.
 
-The main identified limitation is the absence of rate limiting or account lockout for repeated failed login attempts.
+One limitation is that there is currently no rate limiting for repeated login attempts.
 
-Additional security analysis, including JWT `alg:none` testing, brute-force testing, and command-line log analysis, is documented in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md).
+More details about the security testing and log analysis can be found in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md).
 
-## Assessment Notes
+## Notes
 
-This project intentionally uses an in-memory user store and does not use a database. This keeps the implementation minimal for the assessment but would not be appropriate for a production authentication system without additional infrastructure and security controls.
+The users are stored in memory instead of a database. I used this approach to keep the project small and focused on the requirements of the assessment.
+
+For a real application, a database and additional security controls would be needed.
